@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { useWeb3 } from '../providers/Web3ModalProvider';
 import { api } from '../services/api';
 import { ethers } from 'ethers';
@@ -42,20 +42,20 @@ export default function TokensPage() {
   const [tokenLevels, setTokenLevels] = useState<{ [key: string]: any[] }>({});
   const wsRef = useRef<WebSocket | null>(null);
 
-  const calculateLevelRanges = (levels: any[]) => {
+  const calculateLevelRanges = (levels: { rollNumber: number; winAmount: string }[]) => {
     if (!levels || !Array.isArray(levels)) return [];
     
     // Calculate total rolls first
-    const totalRolls = levels.reduce((sum, level) => sum + Number(level[0]), 0);
+    const totalRolls = levels.reduce((sum, level) => sum + Number(level.rollNumber), 0);
     
     let currentRange = 0;
     return levels.map(level => {
-      const rollNumber = Number(level[0]);
+      const rollNumber = Number(level.rollNumber);
       const range = {
         start: currentRange,
         end: currentRange + rollNumber,
         rollNumber,
-        winAmount: level[2] ? ethers.utils.formatEther(level[2]) : '0'
+        winAmount: level.winAmount
       };
       currentRange += rollNumber;
       const winPercentage = (rollNumber / totalRolls) * 100;
@@ -63,7 +63,7 @@ export default function TokensPage() {
     });
   };
 
-  const fetchTokenLevels = async (tokenId: string) => {
+  const fetchTokenLevels = useCallback(async (tokenId: string) => {
     if (!provider) return;
     try {
       const signer = provider.getSigner();
@@ -73,7 +73,7 @@ export default function TokensPage() {
     } catch (error) {
       console.error('Error fetching token levels:', error);
     }
-  };
+  }, [provider]);
 
   const fetchHoldings = async () => {
     if (!address) {
@@ -92,7 +92,7 @@ export default function TokensPage() {
     }
   };
 
-  const connectWebSocket = () => {
+  const connectWebSocket = useCallback(() => {
     // If we already have a connection, don't create a new one
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       console.log('WebSocket already connected on tokens page');
@@ -138,7 +138,7 @@ export default function TokensPage() {
       // Close the connection on error to trigger reconnection
       ws.close();
     };
-  };
+  }, [fetchHoldings]);
 
   useEffect(() => {
     const checkNetwork = async () => {
@@ -165,7 +165,7 @@ export default function TokensPage() {
         wsRef.current = null;
       }
     };
-  }, [address]);
+  }, [address, connectWebSocket, fetchHoldings]);
 
   useEffect(() => {
     if (holdings?.erc721) {
@@ -173,7 +173,7 @@ export default function TokensPage() {
         fetchTokenLevels(tokenId);
       });
     }
-  }, [holdings?.erc721, provider]);
+  }, [holdings?.erc721, fetchTokenLevels]);
 
   const openTicket = async (tokenId: string) => {
     if (!provider || !address) return;

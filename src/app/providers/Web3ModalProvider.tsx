@@ -2,7 +2,7 @@
 
 import { ethers } from 'ethers';
 import Web3Modal from 'web3modal';
-import { ReactNode, createContext, useContext, useEffect, useState } from 'react';
+import { ReactNode, createContext, useContext, useEffect, useState, useRef } from 'react';
 
 interface Web3ContextType {
   provider: ethers.providers.Web3Provider | null;
@@ -29,6 +29,7 @@ export function Web3ModalProvider({ children }: { children: ReactNode }) {
   const [signer, setSigner] = useState<ethers.Signer | null>(null);
   const [address, setAddress] = useState<string | null>(null);
   const [web3Modal, setWeb3Modal] = useState<Web3Modal | null>(null);
+  const providerRef = useRef<ethers.providers.Web3Provider | null>(null);
 
   useEffect(() => {
     const modal = new Web3Modal({
@@ -43,14 +44,20 @@ export function Web3ModalProvider({ children }: { children: ReactNode }) {
 
     try {
       const instance = await web3Modal.connect();
-      const provider = new ethers.providers.Web3Provider(instance);
-      const signer = provider.getSigner();
-      const address = await signer.getAddress();
+      const newProvider = new ethers.providers.Web3Provider(instance);
+      const newSigner = newProvider.getSigner();
+      const newAddress = await newSigner.getAddress();
 
-      setProvider(provider);
-      setSigner(signer);
-      setAddress(address);
+      // Clean up old event listeners
+      if (providerRef.current) {
+        const oldInstance = providerRef.current.provider;
+        if (oldInstance) {
+          (oldInstance as any).removeAllListeners('accountsChanged');
+          (oldInstance as any).removeAllListeners('chainChanged');
+        }
+      }
 
+      // Set up new event listeners
       instance.on('accountsChanged', (accounts: string[]) => {
         setAddress(accounts[0] || null);
       });
@@ -58,6 +65,11 @@ export function Web3ModalProvider({ children }: { children: ReactNode }) {
       instance.on('chainChanged', () => {
         window.location.reload();
       });
+
+      providerRef.current = newProvider;
+      setProvider(newProvider);
+      setSigner(newSigner);
+      setAddress(newAddress);
     } catch (error) {
       console.error('Error connecting to wallet:', error);
     }
@@ -67,16 +79,34 @@ export function Web3ModalProvider({ children }: { children: ReactNode }) {
     if (web3Modal) {
       web3Modal.clearCachedProvider();
     }
+    if (providerRef.current) {
+      const instance = providerRef.current.provider;
+      if (instance) {
+        (instance as any).removeAllListeners('accountsChanged');
+        (instance as any).removeAllListeners('chainChanged');
+      }
+    }
+    providerRef.current = null;
     setProvider(null);
     setSigner(null);
     setAddress(null);
   };
 
   useEffect(() => {
-    if (web3Modal?.cachedProvider) {
+    if (typeof window !== 'undefined' && web3Modal?.cachedProvider) {
       connect();
     }
-  }, [web3Modal]);
+
+    return () => {
+      if (providerRef.current) {
+        const instance = providerRef.current.provider;
+        if (instance) {
+          (instance as any).removeAllListeners('accountsChanged');
+          (instance as any).removeAllListeners('chainChanged');
+        }
+      }
+    };
+  }, [web3Modal, connect]);
 
   return (
     <Web3Context.Provider value={{ provider, signer, address, connect, disconnect }}>

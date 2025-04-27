@@ -2,14 +2,15 @@ import { ethers } from 'ethers';
 
 export interface MintingDetails {
   tokenId: string;
+  timestamp: Date;
+  transactionHash: string;
+  tokenType: 'ERC721' | 'ERC404';
   levels: {
-    winAmount: string;
     rollNumber: number;
+    winAmount: string;
   }[];
   rollResult?: number;
   payout?: string;
-  timestamp: Date;
-  transactionHash: string;
 }
 
 export interface Opening {
@@ -47,25 +48,68 @@ export interface Holdings {
 }
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+console.log('Current API URL:', API_URL);
+console.log('Environment variable:', process.env.NEXT_PUBLIC_API_URL);
+
+// Add a function to ensure the URL is properly formatted
+const getApiUrl = (endpoint: string) => {
+  const url = `${API_URL}${endpoint}`;
+  console.log('Making request to:', url);
+  return url;
+};
+
+// Simplify fetch options
+const fetchOptions = {
+  headers: {
+    'Accept': 'application/json',
+    'Content-Type': 'application/json'
+  },
+  mode: 'cors' as const,
+  credentials: 'omit' as const
+};
 
 export const api = {
   async getMintingDetails(): Promise<MintingDetails[]> {
     try {
-      const response = await fetch(`${API_URL}/minting-details`);
+      const url = getApiUrl('/minting-details');
+      console.log('Fetching minting details from:', url);
+      const response = await fetch(url, fetchOptions);
+      console.log('Response status:', response.status);
+      console.log('Response headers:', Object.fromEntries(response.headers.entries()));
+      
       if (!response.ok) {
+        if (response.status === 404) {
+          console.warn('API endpoint not found. Is the server running?');
+          return [];
+        }
         throw new Error(`Failed to fetch minting details: ${response.statusText}`);
       }
+      const contentType = response.headers.get('content-type');
+      console.log('Content-Type:', contentType);
+      
+      if (!contentType || !contentType.includes('application/json')) {
+        console.warn('Invalid response format: expected JSON. Is the server running?');
+        const text = await response.text();
+        console.log('Received non-JSON response:', text);
+        return [];
+      }
       const data = await response.json();
-      return data.map((detail: any) => ({
+      console.log('Received data:', JSON.stringify(data, null, 2));
+      return data.map((detail: MintingDetails) => ({
         ...detail,
         timestamp: new Date(detail.timestamp),
-        levels: detail.levels.map((level: any) => ({
+        levels: detail.levels.map((level) => ({
           ...level,
           winAmount: level.winAmount.toString()
         }))
       }));
     } catch (error) {
       console.error('Error fetching minting details:', error);
+      if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
+        console.error('Connection Error: Please check if the server is running and accessible.');
+        console.error('Try visiting this URL in your browser:', API_URL);
+      }
+      console.error('Full error:', JSON.stringify(error, null, 2));
       return [];
     }
   },
@@ -127,21 +171,45 @@ export const api = {
 
   async getMintingDetailsByAddress(address: string): Promise<MintingDetails[]> {
     try {
-      const response = await fetch(`${API_URL}/address/${address}/minting-details`);
+      const url = getApiUrl(`/address/${address}/minting-details`);
+      console.log('Fetching minting details for address:', address);
+      const response = await fetch(url, fetchOptions);
+      console.log('Response status:', response.status);
+      console.log('Response headers:', Object.fromEntries(response.headers.entries()));
+      
       if (!response.ok) {
+        if (response.status === 404) {
+          console.warn('API endpoint not found. Is the server running?');
+          return [];
+        }
         throw new Error(`Failed to fetch minting details: ${response.statusText}`);
       }
+      const contentType = response.headers.get('content-type');
+      console.log('Content-Type:', contentType);
+      
+      if (!contentType || !contentType.includes('application/json')) {
+        console.warn('Invalid response format: expected JSON. Is the server running?');
+        const text = await response.text();
+        console.log('Received non-JSON response:', text);
+        return [];
+      }
       const data = await response.json();
-      return data.map((detail: any) => ({
+      console.log('Received data:', JSON.stringify(data, null, 2));
+      return data.map((detail: MintingDetails) => ({
         ...detail,
         timestamp: new Date(detail.timestamp),
-        levels: detail.levels.map((level: any) => ({
+        levels: detail.levels.map((level) => ({
           ...level,
           winAmount: level.winAmount.toString()
         }))
       }));
     } catch (error) {
       console.error('Error fetching minting details:', error);
+      if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
+        console.error('Connection Error: Please check if the server is running and accessible.');
+        console.error('Try visiting this URL in your browser:', API_URL);
+      }
+      console.error('Full error:', JSON.stringify(error, null, 2));
       return [];
     }
   },

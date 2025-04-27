@@ -1,7 +1,7 @@
 'use client';
 
 import { ethers } from 'ethers';
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { useWeb3 } from '../providers/Web3ModalProvider';
 import { api, MintingDetails } from '../services/api';
 
@@ -22,17 +22,20 @@ export default function ActivitySection() {
     }
   };
 
-  const connectWebSocket = () => {
+  const connectWebSocket = useCallback(() => {
+    // If we already have a connection, don't create a new one
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       console.log('WebSocket already connected on activity section');
       return;
     }
 
+    // If we have a connection that's closing, wait for it to close
     if (wsRef.current?.readyState === WebSocket.CLOSING) {
       console.log('WebSocket is closing, waiting...');
       return;
     }
 
+    // Close any existing connection before creating a new one
     if (wsRef.current) {
       wsRef.current.close();
     }
@@ -54,6 +57,7 @@ export default function ActivitySection() {
 
     ws.onclose = () => {
       console.log('WebSocket disconnected, attempting to reconnect...');
+      // Only attempt to reconnect if the component is still mounted
       if (wsRef.current === ws) {
         setTimeout(connectWebSocket, 3000);
       }
@@ -61,9 +65,10 @@ export default function ActivitySection() {
 
     ws.onerror = (error) => {
       console.error('WebSocket error:', error);
+      // Close the connection on error to trigger reconnection
       ws.close();
     };
-  };
+  }, []);
 
   useEffect(() => {
     fetchMintingDetails();
@@ -75,9 +80,9 @@ export default function ActivitySection() {
         wsRef.current = null;
       }
     };
-  }, []);
+  }, [connectWebSocket]);
 
-  const calculateLevelRanges = (levels: any[]) => {
+  const calculateLevelRanges = (levels: { rollNumber: number; winAmount: string }[]) => {
     if (!levels || !Array.isArray(levels)) return [];
     
     // Calculate total rolls first
@@ -131,7 +136,7 @@ export default function ActivitySection() {
                   {detail.rollResult !== undefined ? (
                     <>
                       <p className="text-sm">Roll: {detail.rollResult}</p>
-                      <p className="text-sm">Payout: {ethers.utils.formatEther(detail.payout || '0')} ETH</p>
+                      <p className="text-sm">Payout: {ethers.utils.formatEther(detail.payout || '0')} tokens</p>
                     </>
                   ) : (
                     <p className="text-sm text-yellow-500">Not Opened</p>
